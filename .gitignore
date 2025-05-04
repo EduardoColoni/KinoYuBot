@@ -1,0 +1,15 @@
+# Ignorar o ambiente virtual
+.venv/
+
+# Ignorar arquivos temporários do Python
+__pycache__/
+*.py[cod]
+
+# Ignorar variáveis de ambiente
+.env
+
+# Ignorar arquivos de log
+*.log
+
+# Ignorar configurações de IDEs (como PyCharm)
+.idea/
