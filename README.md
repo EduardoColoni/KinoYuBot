@@ -37,8 +37,8 @@ Desenvolver um bot de Discord capaz de:
 
 ### 🌐 Backend com FastAPI
 - API assíncrona leve com rotas organizadas.
-- Rota principal de callback e home.
-- Pronto para expansão com novos endpoints (ex: /sorteios, /status).
+- Rota principal de callback e pegar chatters.
+- Pronto para expansão com novos endpoints (ex: /histórico, /status).
 
 ---
 
