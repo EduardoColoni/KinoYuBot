@@ -46,7 +46,7 @@ async def twitch_callback(request: Request):
         if response.status_code == 200:
             token_json = response.json()
             cursor.execute(
-                "INSERT INTO token_twitch (json_token) VALUES (%s)",
+                "INSERT INTO token_twitch (token) VALUES (%s)",
                 [json.dumps(token_json)]
             )
             connection.commit()
@@ -56,9 +56,6 @@ async def twitch_callback(request: Request):
         cursor.close()
         encerra_conn(connection)
         print("Resposta da Twitch:", response.json())
-    except requests.exceptions.RequestException as e:
-        # Erros relacionados à requisição (ex: sem conexão, timeout, URL errada)
-        return HTMLResponse(f"Erro de requisição ao tentar autenticar com a Twitch: {str(e)}")
     except requests.exceptions.RequestException as e:
         # Erros relacionados à requisição (ex: sem conexão, timeout, URL errada)
         return HTMLResponse(f"Erro de requisição ao tentar autenticar com a Twitch: {str(e)}")
@@ -72,7 +69,7 @@ async def get_chatters(request: Request):
         cursor = connection.cursor()
 
         cursor.execute(
-            "SELECT json_token FROM token_twitch ORDER BY id DESC LIMIT 1"
+            "SELECT token FROM token_twitch ORDER BY id DESC LIMIT 1"
         )
 
         token = cursor.fetchone()
@@ -95,52 +92,55 @@ async def get_chatters(request: Request):
         }
 
         chatters = requests.get("https://api.twitch.tv/helix/chat/chatters", params=params, headers=headers)
+        return HTMLResponse(chatters.text)
         print(chatters.json())
     except requests.exceptions.RequestException as e:
-        await refazer_token(request)
+        #await refazer_token(request)
         return HTMLResponse("Erro ao autenticar, tente novamente: " + str(e))
 
+@app.get("/get_refreshToken", response_class=HTMLResponse)
 async def refazer_token(request: Request):
 
-    connection = conn()
-    cursor = connection.cursor()
+    try:
+        connection = conn()
+        cursor = connection.cursor()
 
-    cursor.execute(
-        "SELECT json_token FROM token_twitch ORDER BY id DESC LIMIT 1"
-    )
+        cursor.execute(
+            "SELECT token FROM token_twitch ORDER BY id DESC LIMIT 1"
+        )
 
-    refresh_token_bruto = cursor.fetchone()
+        refresh_token_bruto = cursor.fetchone()
 
 
-    if refresh_token_bruto:
-        json_data = refresh_token_bruto[0]
-        refresh_token = json_data.get("refresh_token")
+        if refresh_token_bruto:
+            json_data = refresh_token_bruto[0]
+            refresh_token = json_data.get("refresh_token")
 
-    data = {
-        "client_id" : client_id,
-        "client_secret" : client_secret,
-        "refresh_token" : refresh_token,
-        "grant_type" : "refresh_token"
-    }
-    acess_token = requests.post("https://id.twitch.tv/oauth2/token", data=data)
+        data = {
+            "client_id" : client_id,
+            "client_secret" : client_secret,
+            "refresh_token" : refresh_token,
+            "grant_type" : "refresh_token"
+        }
+        acess_token = requests.post("https://id.twitch.tv/oauth2/token", data=data)
 
-    if acess_token.status_code == 200:
-        token_json = acess_token.json()
-        json_str = json.dumps(token_json)
-        cursor.execute("""
-            UPDATE token_twitch
-            SET json_token = %s
-            WHERE id = (
-                SELECT id FROM token_twitch ORDER BY id DESC LIMIT 1
+        if acess_token.status_code == 200:
+            token_json = acess_token.json()
+            json_str = json.dumps(token_json)
+            cursor.execute(
+                "UPDATE token_twitch SET token = %s WHERE id = (SELECT id FROM token_twitch ORDER BY id DESC LIMIT 1)",
+                [json_str]
             )
-        """, [json_str])
-        connection.commit()
+            connection.commit()
+            cursor.close()
+            encerra_conn(connection)
+            print("Resposta da Twitch deu certo:", acess_token.json())
+        else:
+            return HTMLResponse("Erro ao autenticar: " + acess_token.text)
+            cursor.close()
+            encerra_conn(connection)
 
-        cursor.close()
-        encerra_conn(connection)
+    except requests.exceptions.RequestException as e:
+        return HTMLResponse("Erro ao autenticar, tente novamente: " + str(e))
 
-        return JSONResponse(content=token_json)
-    else:
-        cursor.close()
-        encerra_conn(connection)
-        return HTMLResponse("Erro ao autenticar: " + acess_token.text)
+

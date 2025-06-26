@@ -23,7 +23,8 @@ async def on_ready():
 @bot.command()
 async def iniciar(ctx:commands.Context):
         await ctx.reply("O sorteio foi iniciado!")
-        response = requests.get("https://remarkably-knowing-serval.ngrok-free.app/webhook/start-bot")
+        response = requests.get("https://remarkably-knowing-serval.ngrok-free.app/get_chatters")
+        await ctx.reply(response.text)
 
 
 try:

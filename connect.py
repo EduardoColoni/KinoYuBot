@@ -13,7 +13,7 @@ def conn():
             password=pwd,
             host="localhost",
             port=5432,
-            database="twitch_autenticacao"
+            database="postgres"
         )
         print("Conectado com sucesso!")
         return conecta
