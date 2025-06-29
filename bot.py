@@ -3,7 +3,7 @@ import os
 import requests
 from dotenv import load_dotenv
 from discord.ext import commands
-
+from src.bot.commands.raffle_commands import raffle_commands
 
 load_dotenv()
 token = os.getenv("DISCORD_TOKEN")
@@ -25,6 +25,8 @@ async def iniciar(ctx:commands.Context):
         await ctx.reply("O sorteio foi iniciado!")
         response = requests.get("https://remarkably-knowing-serval.ngrok-free.app/get_chatters")
         await ctx.reply(response.text)
+
+bot.load_extension("src.bot.commands.raffle_commands")
 
 
 try:

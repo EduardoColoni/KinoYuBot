@@ -1,4 +1,4 @@
-from models.postgres.connection.postgres_connection import PostgresConnectionHandle
+from src.database.postgres.connection.postgres_connection import PostgresConnectionHandle
 import json
 
 class PostgresRepository:

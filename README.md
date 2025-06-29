@@ -34,12 +34,16 @@ Desenvolver um bot de Discord capaz de:
 - Conexão segura com PostgreSQL usando `psycopg2`.
 - Armazenamento de tokens da Twitch em formato JSON.
 - Gerenciamento modular da conexão (`connect.py`).
+- Configurado Redis
 
 ### 🌐 Backend com FastAPI
 - API assíncrona leve com rotas organizadas.
 - Rota principal de callback e pegar chatters.
 - Pronto para expansão com novos endpoints (ex: /histórico, /status).
 
+### 📡 Integração total com a API da Twitch
+- Recuperação da lista de espectadores ao vivo (via API Helix ou alternativa).
+- Validação e renovação de tokens expirados com `refresh_token`.
 ---
 
 ## 🚧 Funcionalidades em desenvolvimento
@@ -50,9 +54,6 @@ Desenvolver um bot de Discord capaz de:
 - Lista de itens predefinida (em arquivo ou banco).
 - Feedback automático de sorteio no canal do Discord.
 
-### 📡 Integração total com a API da Twitch
-- Recuperação da lista de espectadores ao vivo (via API Helix ou alternativa).
-- Validação e renovação de tokens expirados com `refresh_token`.
 
 ### 🔒 Segurança e Robustez
 - Adição de logs, autenticações adicionais e proteção de endpoints.
@@ -68,6 +69,7 @@ Desenvolver um bot de Discord capaz de:
 - **OAuth2** – Autenticação segura com a Twitch
 - **Twitch API (Helix)** – Para monitoramento da transmissão
 - **PostgreSQL** – Armazenamento seguro de tokens
+- **Redis** - Armazenamento cache para o banco de dados
 - **psycopg2** – Driver PostgreSQL
 - **dotenv** – Variáveis de ambiente
 - **ngrok** – Exposição de APIs locais para testes
@@ -78,13 +80,52 @@ Desenvolver um bot de Discord capaz de:
 
 ```
 KinoYuBot/
-├── bot.py              # Lógica do bot Discord
-├── main.py             # Backend FastAPI (autenticação)
-├── connect.py          # Conexão com PostgreSQL
-├── .env                # Tokens e variáveis sensíveis
-├── README.md           # Este arquivo
-├── requirements.txt    # Bibliotecas utilizadas
-└── .venv/              # Ambiente virtual
+├── .venv/                              # Ambiente virtual
+├── .env                                # Variáveis de ambiente (DISCORD_TOKEN, CLIENT_ID, CLIENT_SECRET, DB_PASSWORD, REDIS_HOST, etc.)
+├── .gitignore
+├── LICENSE
+├── README.md
+├── requirements.txt                    # Dependências do projeto (discord.py, fastapi, uvicorn, python-dotenv, psycopg2, redis, requests)
+
+├── bot/                                # Lógica do Bot Discord
+│   ├── __init__.py
+│   ├── main_bot.py                     # Inicialização do bot e carregamento dos cogs
+│   ├── commands/                           # Comandos do bot no Discord
+│   │   ├── __init__.py
+│   │   └── raffle_commands.py         # Comando '!iniciar' e lógica de sorteio (em desenvolvimento)
+│   └── services/                       # Comunicação com o backend FastAPI
+│       ├── __init__.py
+│       └── backend_api_client.py      # Cliente HTTP para interagir com o backend (get_chatters, refresh_token)
+
+├── api/                                # Backend FastAPI
+│   ├── __init__.py
+│   ├── main_api.py                     # Inicialização da aplicação FastAPI
+│   ├── routes/
+│   │   ├── __init__.py
+│   │   ├── auth_routes.py             # Endpoints de autenticação Twitch
+│   │   └── chatters_routes.py         # Endpoint para obter os espectadores ativos
+│   └── services/
+│       ├── __init__.py
+│       └── twitch_api_service.py      # Requisições à API da Twitch (OAuth, Helix)
+
+├── core/                               # Módulos e configurações compartilhadas
+│   ├── __init__.py
+│   ├── config.py                       # Carregamento de variáveis de ambiente e configurações globais
+│   └── exceptions.py                   # Exceções customizadas
+
+├── database/
+│   ├── __init__.py
+│   ├── postgres/
+│   │   ├── __init__.py
+│   │   ├── connection_options_postgres.py  # Configurações de conexão com PostgreSQL
+│   │   ├── postgres_connection.py          # Gerenciamento da conexão
+│   │   └── postgres_repository.py          # Operações de CRUD para os tokens
+│   └── redis/
+│       ├── __init__.py
+│       ├── connection_options_redis.py     # Configurações de conexão com Redis
+│       ├── redis_connection.py             # Gerenciamento da conexão
+│       └── redis_repository.py             # Operações de cache com Redis
+
 ```
 
 ---
@@ -127,7 +168,7 @@ ngrok http 8000
 
 ## 👨‍💻 Autor
 
-**Eduardo Henrique**  
+**Eduardo Coloni**  
 Desenvolvedor Backend com foco em APIs, bots e integrações em tempo real.  
 Tecnologias dominadas: Python, FastAPI, PostgreSQL, Discord.py, OAuth2.
 
