@@ -3,7 +3,7 @@ from dotenv import load_dotenv
 
 load_dotenv()
 
-discord = {
+discord_config = {
     'TOKEN': str(os.getenv('DISCORD_TOKEN')),
 }
 

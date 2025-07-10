@@ -176,4 +176,5 @@ Tecnologias dominadas: Python, FastAPI, PostgreSQL, Discord.py, OAuth2.
 
 ## 📝 Licença
 
-Este projeto está licenciado sob a MIT License.
+
+#Colocar depois as coisas de configuração dos bancos, teste, dev e produção#

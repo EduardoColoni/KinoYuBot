@@ -1,5 +1,5 @@
 from random import choices
 
-def sorteio(itens = [], raffle = []):
-    result = choices(itens, weights=raffle)
+def sorteio(itens = [], peso = []):
+    result = choices(itens, weights=peso)
     return result

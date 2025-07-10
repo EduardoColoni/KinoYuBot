@@ -1,16 +1,44 @@
 from fastapi import Request, APIRouter
 from fastapi.responses import HTMLResponse
 import requests
-from src.database.postgres.postgres_repository import PostgresRepository
+from src.database.postgres.postgres_repository_auth import PostgresRepository
+from src.database.postgres.postgres_repository_raffle import PostgresRepositoryRaffle
+from src.database.redis.redis_repository import RedisRepository
+from src.database.redis.connection.redis_connection import RedisConnectionHandle
+import urllib.parse
 from src.core.config import twitch
 
 router = APIRouter()
 
+
+@router.get("/teste_guild/{guild}", response_class=HTMLResponse)
+async def test_guild(request: Request, guild: str):
+    repo_raffle = PostgresRepositoryRaffle()
+    guild_id = repo_raffle.select_guild_id(guild)
+    return HTMLResponse(str(guild_id))
+
 @router.get("/twitch_callback", response_class=HTMLResponse)
 async def twitch_callback(request: Request):
+    redis_conn = RedisConnectionHandle().connect()
+    redis_repository = RedisRepository(redis_conn)
     repo = None
     code = request.query_params.get("code")
-    print("Código de autorização recebido da Twitch:", code)
+    encoded_state = request.query_params.get("state")
+
+    if not code or not encoded_state:
+        return HTMLResponse("<h1>Erro: parâmetro ausente.</h1>", status_code=400)
+
+    state = urllib.parse.unquote(encoded_state)
+    try:
+        guild_id, csrf = state.split(":")
+    except:
+        return HTMLResponse("<h1>State malformado.</h1>", status_code=400)
+
+    stored_guild = redis_repository.get(f"oauth_state:{csrf}")
+    if not stored_guild or stored_guild != guild_id:
+        return HTMLResponse("<h1>State inválido ou expirado.</h1>", status_code=403)
+
+    redis_repository.delete(f"oauth_state:{csrf}")
 
     data = {
         "client_id": twitch["CLIENT_ID"],
@@ -27,9 +55,12 @@ async def twitch_callback(request: Request):
 
         if response.status_code == 200:
             token_json = response.json()
-            repo = PostgresRepository()
-            repo.insert_token(token_json)
+
+            streamer_name, streamer_id = get_user(token_json["access_token"])
             print("Resposta da Twitch:", token_json)
+            repo = PostgresRepository()
+            repo.insert_token(token_json, streamer_id, guild_id, streamer_name) #########################################
+            #print("Resposta da Twitch:", token_json)
             return HTMLResponse("<h1>Autenticação concluída com sucesso! 🎉</h1>")
         else:
             return HTMLResponse("Erro ao autenticar: " + response.text)
@@ -74,3 +105,17 @@ async def refazer_token(request: Request):
     finally:
         if repo:  # Fecha a conexão se ela existir
             repo.close()
+
+
+def get_user(token: str):
+    headers = {
+        "Authorization": f"Bearer {token}",
+        "Client-Id": twitch["CLIENT_ID"]
+    }
+
+    response = requests.get("https://api.twitch.tv/helix/users", headers=headers)
+    response.raise_for_status()
+
+    data = response.json()
+    user = data["data"][0]
+    return user["login"], user["id"]

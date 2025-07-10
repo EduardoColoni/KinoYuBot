@@ -24,7 +24,7 @@ class RedisRepository:
             return value.decode('utf-8')
 
     def insert_ex(self, key: str, value: any, ex: int) -> None:
-        self.__redis_conn.hset(key, value, ex=ex)
+        self.__redis_conn.set(key, value, ex=ex)
 
     def insert_hash_ex(self, key: str, field: str, value: any, ex: int) -> None:
         self.__redis_conn.hset(key, field, value)
