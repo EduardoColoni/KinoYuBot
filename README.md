@@ -1,9 +1,9 @@
 
 # 🎮 KinoYuBot – Discord Bot Integrado à Twitch com Sorteios Automatizados
 
-KinoYuBot é um projeto pessoal desenvolvido com o objetivo de unir tecnologias modernas como Discord, Twitch, FastAPI e PostgreSQL em um sistema completo de sorteios ao vivo, com autenticação segura via OAuth2.
+KinoYuBot é um projeto pessoal desenvolvido com o objetivo de unir tecnologias modernas como Discord, Twitch, FastAPI, Redis e PostgreSQL em um sistema completo de sorteios ao vivo, com autenticação segura via OAuth2.
 
-Este projeto representa minhas habilidades em **integrações de APIs**, **autenticação segura**, **comunicação entre serviços**, e **estruturação de aplicações backend**.
+Este projeto representa minhas habilidades em **integrações e criação de APIs**, **autenticação segura**, **comunicação entre serviços**, e **estruturação de aplicações backend**.
 
 ---
 
@@ -13,8 +13,8 @@ Desenvolver um bot de Discord capaz de:
 
 - Autenticar um streamer da Twitch via OAuth2.
 - Monitorar os espectadores ativos da live.
-- Realizar sorteios automáticos de itens com base em lógica de probabilidade fixa.
-- Enviar notificações diretamente no Discord.
+- Realizar sorteios automáticos de itens com base em lógica de probabilidade variável.
+- Enviar notificações diretamente no Discord e twitch.
 
 ---
 
@@ -44,6 +44,10 @@ Desenvolver um bot de Discord capaz de:
 ### 📡 Integração total com a API da Twitch
 - Recuperação da lista de espectadores ao vivo (via API Helix ou alternativa).
 - Validação e renovação de tokens expirados com `refresh_token`.
+
+### 🎁 Sorteios com base em espectadores
+- Cadastro de itens com seus pesos para sorteio separado por streamer
+
 ---
 
 ## 🚧 Funcionalidades em desenvolvimento
@@ -51,9 +55,7 @@ Desenvolver um bot de Discord capaz de:
 ### 🎁 Sorteios com base em espectadores
 - Agendamento de verificação periódica (a cada minuto).
 - Lógica de sorteio de itens e espectadores.
-- Lista de itens predefinida (em arquivo ou banco).
 - Feedback automático de sorteio no canal do Discord.
-
 
 ### 🔒 Segurança e Robustez
 - Adição de logs, autenticações adicionais e proteção de endpoints.

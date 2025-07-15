@@ -1,5 +1,4 @@
 from src.database.postgres.connection.postgres_connection import PostgresConnectionHandle
-import json
 
 class PostgresRepositoryRaffle:
     def __init__(self) -> None:
@@ -7,62 +6,68 @@ class PostgresRepositoryRaffle:
         self.__conn = self.__db_handle.connect()
         self.__cursor = self.__conn.cursor()
 
-    def insert_itens(self, item: str, weigth: int, raffle_id: int, streamer_id: str) -> None:
+    def insert_items(self, item: str, weight: int, raffle_id: int, guild_id: str) -> None:
         try:
             self.__cursor.execute(
-                "INSERT INTO raffle_itens (item, weight, raffle_id, streamer_id) VALUES (%s, %s, %s, %s)",
-                [str(item), int(weigth), int(raffle_id), str(streamer_id)],
+                "SELECT insert_items(%s, %s, %s, %s)",
+                [item, weight, raffle_id, guild_id]
             )
             self.__conn.commit()
         except Exception as e:
             self.__conn.rollback()
-            raise RuntimeError(f"Failed to insert token: {e}")
+            raise RuntimeError(f"Failed to insert item: {e}")
 
-    def select_token(self) -> any:
+    def make_raffle(self, guild_id: str):
         try:
             self.__cursor.execute(
-                "SELECT token FROM token_twitch ORDER BY id DESC LIMIT 1"
+                "SELECT make_raffle(%s)",
+                [guild_id]
             )
-            row = self.__cursor.fetchone()
-            return row[0] if row else None  # Retorna o dicionário diretamente
+            # fetchone() retornará uma tupla como (5, 10) se id=5 e raffle_id=10 forem sorteados
+            result_tuple = self.__cursor.fetchone()
+            if result_tuple:
+                # result_tuple[0] será o id do item, result_tuple[1] será o raffle_id
+                return result_tuple
+            return None  # Retorna None se nenhum item for sorteado ou se a função retornar NULLs
         except Exception as e:
             self.__conn.rollback()
-            raise RuntimeError(f"Failed to select token: {e}")
+            raise RuntimeError(f"Failed to get raffle item IDs: {e}")
 
-    def refresh_token(self, token_data: dict) -> None:
-        try:
-            #Insere token em formato JSON no banco de dados
-            self.__cursor.execute(
-                "UPDATE token_twitch SET token = %s WHERE id = (SELECT id FROM token_twitch ORDER BY id DESC LIMIT 1)",
-                [json.dumps(token_data)]
-            )
-            self.__conn.commit()
-        except Exception as e:
-            self.__conn.rollback()
-            raise RuntimeError(f"Failed to refresh token: {e}")
-
-    def select_guild_id(self, guild: str) -> any:
+    def make_raffle_id(self, guild_id: str):
         try:
             self.__cursor.execute(
-                "SELECT id FROM streamer WHERE guild_id = %s",
-                [str(guild)]
+                """
+                SELECT id FROM streamer 
+                WHERE guild_id = %s;
+                """,
+                [guild_id]
             )
-            return self.__cursor.fetchone()[0]
+            streamer_id = self.__cursor.fetchone()
+            if streamer_id is None:
+                return None
+            streamer_id = streamer_id[0]
+
         except Exception as e:
             self.__conn.rollback()
-            raise RuntimeError(f"Failed to find guild_id: {e}")
+            raise RuntimeError(f"Failed to get streamer ID: {e}")
 
-    def make_raffle_number(self, streamer_id:int):
         try:
             self.__cursor.execute(
-                "SELECT COALESCE(MAX(raffle_id), 0) FROM raffle_itens WHERE streamer_id = %s;",
-                [int(streamer_id)]
+                """
+                SELECT COALESCE(MAX(raffle_id), 0)
+                FROM raffle_items
+                WHERE streamer_id = %s;
+                """,
+                [streamer_id]
             )
-            return self.__cursor.fetchone()[0]
+            raffle_id = self.__cursor.fetchone()
+            if raffle_id:
+                return raffle_id[0] + 1
+            return 1
+
         except Exception as e:
             self.__conn.rollback()
-            raise RuntimeError(f"Failed: {e}")
-
+            raise RuntimeError(f"Failed to make raffle ID: {e}")
 
     def close(self) -> None:
         #Fecha cursor e conexão

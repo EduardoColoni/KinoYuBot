@@ -1,4 +1,5 @@
 import discord
+import time
 from discord import app_commands
 from discord.ext import commands
 
@@ -19,13 +20,12 @@ class RegisterRaffleModal(discord.ui.Modal, title="Registrar itens para sorteio"
         await interaction.response.send_message("Itens registrados com sucesso!")
         repo_raffle = PostgresRepositoryRaffle()
         guild_id = str(interaction.guild.id)
-        streamer_id = repo_raffle.select_guild_id(guild_id)
-        raffle_id = repo_raffle.make_raffle_number(streamer_id) + 1
+        raffle_id = repo_raffle.make_raffle_id(guild_id)
         itens_bruto = self.itens.value
         itens_processados = organizar_itens(itens_bruto)
         for item, peso in itens_processados:
-            repo_raffle.insert_itens(item=item, weigth=peso, raffle_id = raffle_id, streamer_id = streamer_id)
-
+            repo_raffle.insert_items(item=item, weight=peso, raffle_id = raffle_id, guild_id = guild_id)
+        repo_raffle.close()
 
 # Cog com os comandos do bot
 class Raffle(commands.Cog):
@@ -62,6 +62,13 @@ class Raffle(commands.Cog):
     async def registrar_sorteio(self, interaction: discord.Interaction):
         await interaction.response.send_modal(RegisterRaffleModal())
 
+    @app_commands.command()
+    async def sorteio(self, interaction: discord.Interaction):
+        repo_raffle = PostgresRepositoryRaffle()
+        guild_id = str(interaction.guild.id)
+        item_sorteado = repo_raffle.make_raffle(guild_id)
+        await interaction.response.send_message(f"Olá, o item sorteado foi {item_sorteado}")
+        repo_raffle.close()
 
 # Setup para carregar o Cog
 async def setup(bot):
