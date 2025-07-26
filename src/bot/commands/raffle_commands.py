@@ -1,7 +1,15 @@
+import random
+
 import discord
-import time
+import asyncio
+
+import requests
+from anyio import sleep
 from discord import app_commands
-from discord.ext import commands
+from discord.ext import commands, tasks
+from fastapi import Request, APIRouter
+from fastapi.responses import HTMLResponse
+from watchgod import awatch
 
 from src.database.redis.redis_repository import RedisRepository
 from src.database.redis.connection.redis_connection import RedisConnectionHandle
@@ -62,14 +70,6 @@ class Raffle(commands.Cog):
     async def registrar_sorteio(self, interaction: discord.Interaction):
         await interaction.response.send_modal(RegisterRaffleModal())
 
-    @app_commands.command()
-    async def sorteio(self, interaction: discord.Interaction):
-        repo_raffle = PostgresRepositoryRaffle()
-        guild_id = str(interaction.guild.id)
-        item_sorteado = repo_raffle.make_raffle(guild_id)
-        await interaction.response.send_message(f"Olá, o item sorteado foi {item_sorteado}")
-        repo_raffle.close()
-
 # Setup para carregar o Cog
 async def setup(bot):
     await bot.add_cog(Raffle(bot))
@@ -97,3 +97,42 @@ def organizar_itens(itens):
         itens_processados.append((nome, int(peso)))
 
     return itens_processados
+
+async def raffle_loop(time_in_seconds: int, raffle_func, can_run_func):
+    while True:
+        await asyncio.sleep(time_in_seconds)
+
+        # Verifica se ainda deve continuar (consulta banco ou flag)
+        if not await can_run_func():
+            break
+
+        # Decide se haverá sorteio
+        if random.choice([True, False]):
+            await raffle_func()
+        # Se False, só espera o próximo ciclo
+
+
+def insert_user_configs():
+    print()
+
+def user_configs_return():
+    print()
+
+def can_run_func(user_input: bool, raffle_id: int):
+    repo_raffle = PostgresRepositoryRaffle()
+    item_list_active = repo_raffle.verify_item_list(raffle_id)
+    raffle_status = True
+
+    if not (item_list_active >= 0 or user_input):
+        raffle_status = False
+
+    return raffle_status
+
+def raffle_viewer():
+    response = requests.get("/get_chatters")
+
+def raffle_func(guild_id: str):
+    repo_raffle = PostgresRepositoryRaffle()
+    raffle_item = repo_raffle.make_raffle(guild_id)
+
+    print()

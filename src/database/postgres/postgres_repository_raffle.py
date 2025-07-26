@@ -20,15 +20,15 @@ class PostgresRepositoryRaffle:
     def make_raffle(self, guild_id: str):
         try:
             self.__cursor.execute(
-                "SELECT make_raffle(%s)",
+                "SELECT * FROM make_raffle(%s);",
                 [guild_id]
             )
-            # fetchone() retornará uma tupla como (5, 10) se id=5 e raffle_id=10 forem sorteados
-            result_tuple = self.__cursor.fetchone()
-            if result_tuple:
-                # result_tuple[0] será o id do item, result_tuple[1] será o raffle_id
-                return result_tuple
-            return None  # Retorna None se nenhum item for sorteado ou se a função retornar NULLs
+            result = self.__cursor.fetchone()
+            if result and all(result):
+                selected_item_id, selected_raffle_round_id, streamer_platform_id = result
+                return selected_item_id, selected_raffle_round_id, streamer_platform_id
+            else:
+                return None  # Nenhum item sorteado
         except Exception as e:
             self.__conn.rollback()
             raise RuntimeError(f"Failed to get raffle item IDs: {e}")
@@ -68,6 +68,62 @@ class PostgresRepositoryRaffle:
         except Exception as e:
             self.__conn.rollback()
             raise RuntimeError(f"Failed to make raffle ID: {e}")
+
+    def update_item(self, winner_name: str, item_id: int, raffle_id: int):
+        try:
+            self.__cursor.execute(
+                """
+                    UPDATE raffle_items
+                    SET winner = %s, 
+                    update_at = NOW() 
+                    WHERE id = %s AND raffle_id = %s;
+                """,
+                [winner_name, item_id, raffle_id]
+            )
+            self.__conn.commit()
+
+        except Exception as e:
+            self.__conn.rollback()
+            raise RuntimeError(f"Failed to make raffle ID: {e}")
+
+    def get_last_raffle_id(self, received_streamer_id: int):
+        try:
+            self.__cursor.execute(
+                "SELECT MAX(raffle_id) FROM raffle_items WHERE streamer_id = %s;",
+                [received_streamer_id]
+            )
+            raffle_id = self.__cursor.fetchone()[0]
+            return int(raffle_id)
+        except Exception as e:
+            self.__conn.rollback()
+            raise RuntimeError(f"Failed to get raffle id: {e}")
+
+    def get_streamer_id(self, guild_id: str):
+        try:
+            self.__cursor.execute(
+                "SELECT id FROM streamer WHERE guild_id = %s",
+                [guild_id]
+            )
+            streamer_id = self.__cursor.fetchone()[0]
+            return int(streamer_id)
+        except Exception as e:
+            self.__conn.rollback()
+            raise RuntimeError(f"Failed to get raffle id: {e}")
+
+    def verify_item_list(self, raffle_id: int):
+        try:
+            self.__cursor.execute(
+                """
+                SELECT item FROM raffle_items
+                WHERE raffle_id = %s AND winner IS NULL;
+                """,
+                [raffle_id]
+            )
+            itens = self.__cursor.fetchall()
+            return itens #Vai retornar uma lista dos itens com winner vazio, senão tiver nenhum vai retornar uma tupla vazia []
+        except Exception as e:
+            self.__conn.rollback()
+            raise RuntimeError(f"Failed to verify item: {e}")
 
     def close(self) -> None:
         #Fecha cursor e conexão

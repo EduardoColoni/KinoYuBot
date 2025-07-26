@@ -27,3 +27,7 @@ connection_options_redis = {
     'PORT': int(os.getenv('REDIS_PORT', 6379)),
     'DB': int(os.getenv('REDIS_DB', 0))
 }
+
+api_config = {
+    'URL_BASE': os.getenv('URL_BASE', 'localhost')
+}

@@ -5,8 +5,8 @@ from src.database.postgres.postgres_repository_auth import PostgresRepository
 from src.core.config import twitch
 router = APIRouter()
 
-@router.get("/get_chatters", response_class=HTMLResponse)
-async def get_chatters(request: Request):
+@router.get("/get_chatters/{streamer_id}", response_class=HTMLResponse)
+async def get_chatters(request: Request, streamer_id: str):
     repo = None
     try:
 
@@ -19,13 +19,13 @@ async def get_chatters(request: Request):
         access_token = token_data["access_token"]
 
         params = {
-            "broadcaster_id" : "46736025",
-            "moderator_id" : "46736025"
+            "broadcaster_id" : f"{streamer_id}",
+            "moderator_id" : f"{streamer_id}"
         }
 
         headers = {
             "Authorization": f"Bearer {access_token}",
-            "client_id": twitch["CLIENT_ID"]
+            "Client-Id": twitch["CLIENT_ID"]
         }
 
         chatters = requests.get("https://api.twitch.tv/helix/chat/chatters", params=params, headers=headers)
@@ -40,19 +40,3 @@ async def get_chatters(request: Request):
     finally:
         if repo:  # Fecha a conexão se ela existir
             repo.close()
-
-@router.get("/ola", response_class=HTMLResponse)
-async def ola(request: Request, guild: str):
-    headers = {
-        "Authorization": f"Bearer i4o011nqlh9wp8p4k6whs5syfac0us",
-        "client_id": twitch["CLIENT_ID"]
-    }
-    streamer_response = requests.get("https://api.twitch.tv/helix/users", headers=headers)
-
-    data = streamer_response.json()
-    streamer_name = data["data"][0]["login"]
-    streamer_id = data["data"][0]["id"]
-
-
-
-    return print(streamer_id, streamer_name)
