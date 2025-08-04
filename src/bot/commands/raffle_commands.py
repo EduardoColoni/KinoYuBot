@@ -11,9 +11,13 @@ from fastapi import Request, APIRouter
 from fastapi.responses import HTMLResponse
 from watchgod import awatch
 
+from src.bot.services.raffle_service import RaffleService
+from src.database.postgres.connection.postgres_connection import PostgresPool
 from src.database.redis.redis_repository import RedisRepository
 from src.database.redis.connection.redis_connection import RedisConnectionHandle
 from src.database.postgres.postgres_repository_raffle import PostgresRepositoryRaffle
+
+from src.bot.services import raffle_service
 
 import uuid
 import urllib.parse
@@ -24,16 +28,28 @@ class RegisterRaffleModal(discord.ui.Modal, title="Registrar itens para sorteio"
     def __init__(self):
         super().__init__(title="Registrar itens")
     itens = discord.ui.TextInput(label="Adicione itens(item1:peso1, item2:peso2, etc)", placeholder="ex: skin dourada:50, skin prata:30", max_length=30, style=discord.TextStyle.long)
+
     async def on_submit(self, interaction: discord.Interaction):
-        await interaction.response.send_message("Itens registrados com sucesso!")
-        repo_raffle = PostgresRepositoryRaffle()
-        guild_id = str(interaction.guild.id)
-        raffle_id = repo_raffle.make_raffle_id(guild_id)
-        itens_bruto = self.itens.value
-        itens_processados = organizar_itens(itens_bruto)
-        for item, peso in itens_processados:
-            repo_raffle.insert_items(item=item, weight=peso, raffle_id = raffle_id, guild_id = guild_id)
-        repo_raffle.close()
+        conn = PostgresPool.get_conn()
+        try:
+            guild_id = str(interaction.guild.id)
+            repo_raffle = PostgresRepositoryRaffle(conn)  # passa a conexão
+            service = RaffleService(conn, guild_id)
+            raffle_id = repo_raffle.make_raffle_id(guild_id)
+            itens_bruto = self.itens.value
+            itens_processados = service.organizar_itens(itens_bruto)
+
+            for item, peso in itens_processados:
+                repo_raffle.insert_items(item=item, weight=peso, raffle_id=raffle_id, guild_id=guild_id)
+
+            await interaction.response.send_message("Itens registrados com sucesso!")
+
+        except Exception as e:
+            await interaction.response.send_message("Erro ao inserir os itens!")
+            conn.rollback()
+            raise RuntimeError(f"Erro ao inserir itens: {e}")
+        finally:
+            PostgresPool.release_conn(conn)
 
 # Cog com os comandos do bot
 class Raffle(commands.Cog):
@@ -70,69 +86,25 @@ class Raffle(commands.Cog):
     async def registrar_sorteio(self, interaction: discord.Interaction):
         await interaction.response.send_modal(RegisterRaffleModal())
 
+    @app_commands.command()
+    async def teste(self, interaction: discord.Interaction):
+        conn = PostgresPool.get_conn()
+        try:
+            guild_id = str(interaction.guild.id)
+            service = RaffleService(conn, guild_id)
+            await interaction.response.send_message("iniciando")
+            sorteio = await service.raffle_loop(5, True)
+            print(sorteio)
+        finally:
+            PostgresPool.release_conn(conn)
+
+    @app_commands.command()
+    async def hmmmm(self, interaction: discord.Interaction):
+        service = RaffleService.raffle_viewer(138603338)
+        print(service)
+        await interaction.response.send_message("sla")
+
 # Setup para carregar o Cog
 async def setup(bot):
     await bot.add_cog(Raffle(bot))
 
-
-def organizar_itens(itens):
-    pares = itens.split(",")
-
-    # Lista para guardar os itens formatados
-    itens_processados = []
-
-    for par in pares:
-        # Quebra cada item pelo dois-pontos
-        if ":" not in par:
-            continue  # pula se não tiver formato esperado
-
-        nome, peso = par.split(":", 1)  # 1 = no máximo uma divisão
-
-        nome = nome.strip()
-        peso = peso.strip()
-
-        if not nome or not peso.isdigit():
-            continue  # ignora se algo estiver errado
-
-        itens_processados.append((nome, int(peso)))
-
-    return itens_processados
-
-async def raffle_loop(time_in_seconds: int, raffle_func, can_run_func):
-    while True:
-        await asyncio.sleep(time_in_seconds)
-
-        # Verifica se ainda deve continuar (consulta banco ou flag)
-        if not await can_run_func():
-            break
-
-        # Decide se haverá sorteio
-        if random.choice([True, False]):
-            await raffle_func()
-        # Se False, só espera o próximo ciclo
-
-
-def insert_user_configs():
-    print()
-
-def user_configs_return():
-    print()
-
-def can_run_func(user_input: bool, raffle_id: int):
-    repo_raffle = PostgresRepositoryRaffle()
-    item_list_active = repo_raffle.verify_item_list(raffle_id)
-    raffle_status = True
-
-    if not (item_list_active >= 0 or user_input):
-        raffle_status = False
-
-    return raffle_status
-
-def raffle_viewer():
-    response = requests.get("/get_chatters")
-
-def raffle_func(guild_id: str):
-    repo_raffle = PostgresRepositoryRaffle()
-    raffle_item = repo_raffle.make_raffle(guild_id)
-
-    print()

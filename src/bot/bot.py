@@ -1,6 +1,7 @@
 import discord
 from discord.ext import commands
 from src.core.config import discord_config
+from src.database.postgres.connection.postgres_connection import PostgresPool
 
 intents = discord.Intents.all()
 
@@ -22,5 +23,6 @@ async def load():
 # Executa o carregamento e inicia o bot
 if __name__ == "__main__":
     import asyncio
+    PostgresPool.init_pool(minconn=1, maxconn=5)
     asyncio.run(load())
     bot.run(discord_config['TOKEN'])

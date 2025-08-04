@@ -1,7 +1,9 @@
 import random
 import asyncio
+from functools import partial
 
 import requests
+from aiohttp import streamer
 from anyio import sleep
 from discord import app_commands
 from discord.ext import commands, tasks
@@ -14,84 +16,76 @@ from src.core.config import api_config
 from src.database.redis.redis_repository import RedisRepository
 from src.database.redis.connection.redis_connection import RedisConnectionHandle
 from src.database.postgres.postgres_repository_raffle import PostgresRepositoryRaffle
-
+from src.database.postgres.connection.postgres_connection import PostgresPool
 import uuid
 import urllib.parse
 
 
-def organizar_itens(itens):
-    pares = itens.split(",")
+class RaffleService:
+    def __init__(self, conn, guild_id: str):
+        self.guild_id = guild_id
+        self.conn = conn
+        self.repo_raffle = PostgresRepositoryRaffle(self.conn)
 
-    # Lista para guardar os itens formatados
-    itens_processados = []
+    @staticmethod
+    def organizar_itens(itens):
+        pares = itens.split(",")
 
-    for par in pares:
-        # Quebra cada item pelo dois-pontos
-        if ":" not in par:
-            continue  # pula se não tiver formato esperado
+        # Lista para guardar os itens formatados
+        itens_processados = []
 
-        nome, peso = par.split(":", 1)  # 1 = no máximo uma divisão
+        for par in pares:
+            # Quebra cada item pelo dois-pontos
+            if ":" not in par:
+                continue  # pula se não tiver formato esperado
 
-        nome = nome.strip()
-        peso = peso.strip()
+            nome, peso = par.split(":", 1)  # 1 = no máximo uma divisão
 
-        if not nome or not peso.isdigit():
-            continue  # ignora se algo estiver errado
+            nome = nome.strip()
+            peso = peso.strip()
 
-        itens_processados.append((nome, int(peso)))
+            if not nome or not peso.isdigit():
+                continue  # ignora se algo estiver errado
 
-    return itens_processados
+            itens_processados.append((nome, int(peso)))
 
-async def raffle_loop(time_in_seconds: int, guild_id: str, user_input: bool):
-    while True:
-        await asyncio.sleep(time_in_seconds)
+        return itens_processados
 
-        # Verifica se ainda deve continuar (consulta banco ou flag)
-        if not await can_run_func(user_input):
-            break
+    async def raffle_loop(self, time_in_seconds: int, user_input: bool):
+        while True:
+            await asyncio.sleep(time_in_seconds)
 
-        # Decide se haverá sorteio
-        if random.choice([True, False]):
-            await raffle_item_func()
-        # Se False, só espera o próximo ciclo
+            item = await asyncio.to_thread(partial(self.repo_raffle.make_raffle, self.guild_id))
+            if not user_input or not item:
+                print("Itens para sorteio vazio ou usuário parou a função")
+                break
 
+            if random.choice([True, False]):
+                viewer = await asyncio.to_thread(partial(self.raffle_viewer, item[2]))
+                winner_name = str(viewer["user_name"])
+                self.update_item(winner_name, item[0], item[1])
+                print(f"Sorteio feito: {item}, vencedor: {viewer}")
+            else:
+                print("Não haverá sorteio nesse turno")
 
-def insert_user_configs():
-    print()
+    @staticmethod
+    def raffle_viewer(platform_id: int):
+        url_base = api_config["URL_BASE"]
+        response = requests.get(f"{url_base}/get_chatters/{platform_id}")
+        if response.status_code != 200:
+            raise RuntimeError(f"Erro ao buscar chatters: {response.status_code} - {response.text}")
 
-def user_configs_return():
-    print()
+        try:
+            raw_viewers = response.json()
+        except ValueError as e:
+            raise RuntimeError(f"Resposta não é JSON: {e}")
+        viewers_list = raw_viewers["data"]
+        winner = random.choice(viewers_list)
+        return winner
 
-def get_raffle_id(guild_id: str):
-    repo_raffle = PostgresRepositoryRaffle()
-    #Vai fazer uma consulta no banco para me retornar o streamer id usando o guild_id como chave
-    streamer_id = repo_raffle.get_streamer_id(guild_id)
-    #Agora com o streamer_id pego vai fazer mais uma consulta para agora pegar o raffle_id usando de base o stramer_id para filtrar
-    raffle_id = repo_raffle.get_last_raffle_id(streamer_id)
-    return int(raffle_id), int(streamer_id)
-
-def can_run_func(user_input: bool, guild_id: str):
-    repo_raffle = PostgresRepositoryRaffle()
-    raffle_id = get_raffle_id(guild_id)
-    item_list_active = repo_raffle.verify_item_list(raffle_id)
-    raffle_status = True
-    if not user_input or not item_list_active:
-        raffle_status = False
-    return raffle_status
-
-def raffle_viewer(streamer_id: int):
-    url_base = api_config["URL_BASE"]
-    response = requests.get(f"{url_base}/get_chatters")
-    raw_viewers = response.json()
-    viewers_list = raw_viewers["data"]
-    winner = random.choice(viewers_list)
-    return winner
-
-def raffle_item_func(guild_id: str):
-    repo_raffle = PostgresRepositoryRaffle()
-    raffle_item = repo_raffle.make_raffle(guild_id)
-    return raffle_item
-
-def update_item(winner_name: str, item_id: int, raffle_id: int):
-    repo_raffle = PostgresRepositoryRaffle()
-    repo_raffle.update_item(winner_name, item_id, raffle_id)
+    def update_item(self, winner_name: str, item_id: int, raffle_id: int):
+        try:
+            self.repo_raffle.update_item(winner_name, item_id, raffle_id)
+        except Exception as e:
+            self.conn.rollback()
+            print(f"Falha ao atualizar o item: {item_id} erro: {e}")

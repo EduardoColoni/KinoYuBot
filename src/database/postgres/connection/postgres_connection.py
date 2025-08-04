@@ -1,36 +1,38 @@
 from .connection_options_postgres import connection_options_postgres
-import psycopg2 as pg
-from psycopg2 import Error
+from psycopg2 import Error, pool
 
-class PostgresConnectionHandle:
-    def __init__(self) -> None:
-        """Inicializa o gerenciador de conexão com __conn=None"""
-        self.__conn = None  # Atributo privado para armazenar a conexão
+class PostgresPool:
+    __pool = None
 
-    def connect(self) -> pg.extensions.connection:
-        """Estabelece conexão com o PostgreSQL usando as configurações importadas"""
-        try:
-            # Cria nova conexão usando os parâmetros do connection_options_postgres
-            self.__conn = pg.connect(
+    @classmethod
+    def init_pool(cls, minconn = 1, maxconn = 5):
+        if cls.__pool is None:
+            cls.__pool = pool.SimpleConnectionPool(
+                minconn,
+                maxconn,
                 host=connection_options_postgres['HOST'],
                 port=connection_options_postgres['PORT'],
                 user=connection_options_postgres['USER'],
                 password=connection_options_postgres['PASSWORD'],
                 database=connection_options_postgres['DB_NAME']
             )
-            print('Connected to PostgreSQL')
-            return self.__conn
-        except Error as e:
-            # Log do erro e relança como RuntimeError para tratamento externo
-            print(f"[ERRO BANCO] Falha ao conectar ao banco de dados: {e}")
-            raise RuntimeError("Erro ao conectar ao banco de dados") from e
 
-    def get_conn(self) -> pg.extensions.connection:
-        """Retorna a conexão ativa (ou None se não conectado)"""
-        return self.__conn
+    @classmethod
+    def get_conn(cls):
+        if cls.__pool is None:
+            raise RuntimeError("Connection pool not initialized")
+        print("Conexão realizada ao banco")
+        return cls.__pool.getconn()
 
-    def disconnect(self):
-        """Fecha a conexão ativa se existir"""
-        if self.__conn:
-            self.__conn.close()
-            print('PostgreSQL connection closed')
+    @classmethod
+    def release_conn(cls, conn):
+        if cls.__pool:
+            cls.__pool.putconn(conn)
+            print("Conexão retornada ao pool")
+
+    @classmethod
+    def close_all(cls):
+        if cls.__pool:
+            cls.__pool.closeall()
+            print("Fechada todas conexões com o banco")
+

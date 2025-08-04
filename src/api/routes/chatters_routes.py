@@ -1,42 +1,68 @@
 import requests
 from fastapi import Request, APIRouter
-from fastapi.responses import HTMLResponse
-from src.database.postgres.postgres_repository_auth import PostgresRepository
+from fastapi.responses import HTMLResponse, JSONResponse
+
+from src.database.postgres.postgres_repository_auth import PostgresRepositoryAuth
+from src.database.postgres.connection.postgres_connection import PostgresPool
 from src.core.config import twitch
-router = APIRouter()
 
-@router.get("/get_chatters/{streamer_id}", response_class=HTMLResponse)
-async def get_chatters(request: Request, streamer_id: str):
-    repo = None
-    try:
 
-        repo = PostgresRepository()
-        token_data = repo.select_token()
+class TwitchChattersController:
+    def __init__(self):
+        self.router = APIRouter()
+        self.router.add_api_route(
+            "/get_chatters/{streamer_id}",
+            self.get_chatters,
+            methods=["GET"]
+        )
 
-        if not token_data or "access_token" not in token_data:
-            return HTMLResponse("Token de acesso não encontrado.")
+    async def get_chatters(self, request: Request, streamer_id: str):
+        """Endpoint para obter os chatters de um canal da Twitch"""
+        conn = PostgresPool.get_conn()
+        try:
+            repo_auth = PostgresRepositoryAuth(conn)
 
-        access_token = token_data["access_token"]
+            token_data = repo_auth.select_token()
+            if not token_data or "access_token" not in token_data:
+                return HTMLResponse(
+                    content="<h1>Token de acesso não encontrado</h1>",
+                    status_code=401
+                )
 
-        params = {
-            "broadcaster_id" : f"{streamer_id}",
-            "moderator_id" : f"{streamer_id}"
-        }
+            headers = {
+                "Authorization": f"Bearer {token_data['access_token']}",
+                "Client-Id": twitch["CLIENT_ID"]
+            }
 
-        headers = {
-            "Authorization": f"Bearer {access_token}",
-            "Client-Id": twitch["CLIENT_ID"]
-        }
+            params = {
+                "broadcaster_id": streamer_id,
+                "moderator_id": streamer_id,
+                "first": 1000
+            }
 
-        chatters = requests.get("https://api.twitch.tv/helix/chat/chatters", params=params, headers=headers)
-        return HTMLResponse(chatters.text)
+            response = requests.get(
+                "https://api.twitch.tv/helix/chat/chatters",
+                headers=headers,
+                params=params,
+                timeout=10
+            )
 
-        print(chatters.json())
+            if response.status_code == 200:
+                return JSONResponse(content=response.json())
+            return HTMLResponse(
+                content=f"<h1>Erro na API Twitch: {response.text}</h1>",
+                status_code=response.status_code
+            )
 
-    except requests.exceptions.RequestException as e:
-        #await refazer_token(request)
-        return HTMLResponse("Erro ao autenticar, tente novamente: " + str(e))
+        except requests.exceptions.RequestException as e:
+            return HTMLResponse(
+                content=f"<h1>Erro na requisição: {str(e)}</h1>",
+                status_code=500
+            )
+        finally:
+            PostgresPool.release_conn(conn)
 
-    finally:
-        if repo:  # Fecha a conexão se ela existir
-            repo.close()
+
+def setup_chatters_routes():
+    controller = TwitchChattersController()
+    return controller.router

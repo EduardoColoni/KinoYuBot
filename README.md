@@ -1,4 +1,3 @@
-
 # 🎮 KinoYuBot – Discord Bot Integrado à Twitch com Sorteios Automatizados
 
 KinoYuBot é um projeto pessoal desenvolvido com o objetivo de unir tecnologias modernas como Discord, Twitch, FastAPI, Redis e PostgreSQL em um sistema completo de sorteios ao vivo, com autenticação segura via OAuth2.
@@ -14,7 +13,7 @@ Desenvolver um bot de Discord capaz de:
 - Autenticar um streamer da Twitch via OAuth2.
 - Monitorar os espectadores ativos da live.
 - Realizar sorteios automáticos de itens com base em lógica de probabilidade variável.
-- Enviar notificações diretamente no Discord e twitch.
+- Enviar notificações diretamente no Discord e Twitch.
 
 ---
 
@@ -32,49 +31,48 @@ Desenvolver um bot de Discord capaz de:
 
 ### 🗃️ Banco de Dados
 - Conexão segura com PostgreSQL usando `psycopg2`.
+- Uso de **Connection Pool** com `psycopg2.pool.SimpleConnectionPool`.
+- Banco dividido em ambientes de **teste**, **desenvolvimento** e **produção**.
 - Armazenamento de tokens da Twitch em formato JSON.
-- Gerenciamento modular da conexão (`connect.py`).
-- Configurado Redis
+- Operações organizadas via repositórios.
 
 ### 🌐 Backend com FastAPI
 - API assíncrona leve com rotas organizadas.
-- Rota principal de callback e pegar chatters.
-- Pronto para expansão com novos endpoints (ex: /histórico, /status).
+- Uso de **lifespan events** para inicialização do pool.
+- Cada rota pega e devolve uma conexão do pool corretamente.
+- Serviços desacoplados da lógica de rota.
 
 ### 📡 Integração total com a API da Twitch
-- Recuperação da lista de espectadores ao vivo (via API Helix ou alternativa).
+- Recuperação da lista de espectadores ao vivo via Helix.
 - Validação e renovação de tokens expirados com `refresh_token`.
 
 ### 🎁 Sorteios com base em espectadores
-- Cadastro de itens com seus pesos para sorteio separado por streamer
+- Cadastro de itens com seus pesos para sorteio por streamer.
+- Função em PostgreSQL (`make_raffle`) para sorteio ponderado performático.
+- Sorteios periódicos com controle de continuidade e vencedor.
 
 ---
 
 ## 🚧 Funcionalidades em desenvolvimento
 
-### 🎁 Sorteios com base em espectadores
-- Agendamento de verificação periódica (a cada minuto).
-- Lógica de sorteio de itens e espectadores.
-- Feedback automático de sorteio no canal do Discord.
-
-### 🔒 Segurança e Robustez
-- Adição de logs, autenticações adicionais e proteção de endpoints.
-- Armazenamento de histórico de sorteios.
+- Histórico e visualização dos sorteios realizados.
+- Autenticação de endpoints e dashboard para controle dos sorteios.
 
 ---
 
 ## 🧰 Tecnologias Utilizadas
 
-- **Python 3.10+**
+- **Python 3.13+**
 - **Discord.py** – Bot no Discord
-- **FastAPI** – Backend assíncrono para autenticação e controle
-- **OAuth2** – Autenticação segura com a Twitch
-- **Twitch API (Helix)** – Para monitoramento da transmissão
-- **PostgreSQL** – Armazenamento seguro de tokens
-- **Redis** - Armazenamento cache para o banco de dados
-- **psycopg2** – Driver PostgreSQL
+- **FastAPI** – Backend assíncrono
+- **OAuth2** – Autenticação com Twitch
+- **Twitch API (Helix)** – Obtenção de chatters e dados
+- **PostgreSQL** – Banco de dados relacional
+- **Redis** – Cache (futuramente usado)
+- **psycopg2 + pool** – Driver com Connection Pooling
 - **dotenv** – Variáveis de ambiente
-- **ngrok** – Exposição de APIs locais para testes
+- **ngrok** – Testes locais com exposição externa
+- **asyncio.to_thread** – Execução segura de chamadas bloqueantes no backend
 
 ---
 
@@ -134,34 +132,34 @@ KinoYuBot/
 
 ## 🧪 Como Testar Localmente
 
-1. Clone o repositório e crie o ambiente virtual:
+1. Clone o repositório e instale as dependências:
 ```bash
 git clone https://github.com/seu-usuario/KinoYuBot.git
 cd KinoYuBot
-python -m venv venv
-source venv/bin/activate  # Windows: venv\Scripts\activate
+python -m venv .venv
+source .venv/bin/activate  # Windows: .venv\Scripts\activate
 pip install -r requirements.txt
 ```
 
-2. Configure o `.env`:
+2. Crie um arquivo `.env` com suas configurações:
 ```env
-DISCORD_TOKEN=seu_token_do_discord
-CLIENT_ID=seu_client_id_twitch
-CLIENT_SECRET=seu_client_secret_twitch
-DB_PASSWORD=senha_postgres
+DISCORD_TOKEN=...
+CLIENT_ID=...
+CLIENT_SECRET=...
+DB_PASSWORD=...
 ```
 
-3. Execute o backend:
+3. Execute a API:
 ```bash
-uvicorn main:app --reload
+./init_api.sh
 ```
 
 4. Execute o bot:
 ```bash
-python bot.py
+python bot/bot.py
 ```
 
-5. Exponha localmente com ngrok (opcional):
+5. Use `ngrok` se precisar expor:
 ```bash
 ngrok http 8000
 ```
@@ -171,12 +169,9 @@ ngrok http 8000
 ## 👨‍💻 Autor
 
 **Eduardo Coloni**  
-Desenvolvedor Backend com foco em APIs, bots e integrações em tempo real.  
-Tecnologias dominadas: Python, FastAPI, PostgreSQL, Discord.py, OAuth2.
+Desenvolvedor Backend com foco em bots, APIs, servidores e sistemas assíncronos.
 
 ---
 
 ## 📝 Licença
 
-
-#Colocar depois as coisas de configuração dos bancos, teste, dev e produção#
