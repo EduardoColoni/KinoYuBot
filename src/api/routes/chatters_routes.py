@@ -48,6 +48,7 @@ class TwitchChattersController:
             )
 
             if response.status_code == 200:
+                print(f"Chatters pego com sucesso: {response.json()}")
                 return JSONResponse(content=response.json())
             return HTMLResponse(
                 content=f"<h1>Erro na API Twitch: {response.text}</h1>",

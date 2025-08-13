@@ -1,5 +1,6 @@
 import random
 import asyncio
+import re
 from functools import partial
 
 import requests
@@ -20,43 +21,20 @@ from src.database.postgres.connection.postgres_connection import PostgresPool
 import uuid
 import urllib.parse
 
-
 class RaffleService:
-    def __init__(self, conn, guild_id: str):
+    def __init__(self, conn=None, guild_id=None):
         self.guild_id = guild_id
         self.conn = conn
         self.repo_raffle = PostgresRepositoryRaffle(self.conn)
+        self.user_input = True
 
-    @staticmethod
-    def organizar_itens(itens):
-        pares = itens.split(",")
-
-        # Lista para guardar os itens formatados
-        itens_processados = []
-
-        for par in pares:
-            # Quebra cada item pelo dois-pontos
-            if ":" not in par:
-                continue  # pula se não tiver formato esperado
-
-            nome, peso = par.split(":", 1)  # 1 = no máximo uma divisão
-
-            nome = nome.strip()
-            peso = peso.strip()
-
-            if not nome or not peso.isdigit():
-                continue  # ignora se algo estiver errado
-
-            itens_processados.append((nome, int(peso)))
-
-        return itens_processados
-
-    async def raffle_loop(self, time_in_seconds: int, user_input: bool):
+    async def raffle_loop(self, time_in_seconds: int, on_winner_callback):
         while True:
             await asyncio.sleep(time_in_seconds)
 
             item = await asyncio.to_thread(partial(self.repo_raffle.make_raffle, self.guild_id))
-            if not user_input or not item:
+            if not self.user_input or not item:
+                await on_winner_callback(None)
                 print("Itens para sorteio vazio ou usuário parou a função")
                 break
 
@@ -65,23 +43,41 @@ class RaffleService:
                 winner_name = str(viewer["user_name"])
                 self.update_item(winner_name, item[0], item[1])
                 print(f"Sorteio feito: {item}, vencedor: {viewer}")
+
+                # Chama o callback e passa as informações
+                await on_winner_callback(winner_name, item)
+
             else:
                 print("Não haverá sorteio nesse turno")
 
     @staticmethod
     def raffle_viewer(platform_id: int):
         url_base = api_config["URL_BASE"]
-        response = requests.get(f"{url_base}/get_chatters/{platform_id}")
-        if response.status_code != 200:
-            raise RuntimeError(f"Erro ao buscar chatters: {response.status_code} - {response.text}")
+
+        def get_chatters():
+            resp = requests.get(f"{url_base}/get_chatters/{platform_id}")
+            if resp.status_code != 200:
+                raise RuntimeError(f"Erro ao buscar chatters: {resp.status_code} - {resp.text}")
+            try:
+                return resp.json()
+            except ValueError as e:
+                raise RuntimeError(f"Resposta não é JSON: {e}")
 
         try:
-            raw_viewers = response.json()
-        except ValueError as e:
-            raise RuntimeError(f"Resposta não é JSON: {e}")
-        viewers_list = raw_viewers["data"]
-        winner = random.choice(viewers_list)
-        return winner
+            raw_viewers = get_chatters()
+        except RuntimeError:
+            # Tentativa de refresh
+            refresh_resp = requests.get(f"{url_base}/get_refreshToken")
+            if refresh_resp.status_code != 200:
+                raise RuntimeError(f"Falha ao renovar token: {refresh_resp.status_code} - {refresh_resp.text}")
+            # Tentativa novamente após refresh
+            raw_viewers = get_chatters()
+
+        viewers_list = raw_viewers.get("data", [])
+        if not viewers_list:
+            raise RuntimeError("Nenhum viewer retornado.")
+
+        return random.choice(viewers_list)
 
     def update_item(self, winner_name: str, item_id: int, raffle_id: int):
         try:
@@ -89,3 +85,31 @@ class RaffleService:
         except Exception as e:
             self.conn.rollback()
             print(f"Falha ao atualizar o item: {item_id} erro: {e}")
+
+    @staticmethod
+    def organizar_itens(itens = None):
+        try:
+            pares = itens.split(",")
+            itens_processados = []
+
+            for par in pares:
+                par = par.strip()
+                if not par:
+                    continue
+
+                # Se tiver delimitador, pega nome e peso
+                if ":" in par or ";" in par:
+                    nome, peso = re.split("[:;]", par, maxsplit=1)
+                    nome = nome.strip()
+                    peso = peso.strip()
+                    # Se peso não for numérico, ignora ou define None
+                    peso_valor = int(peso) if peso.isdigit() else None
+                    if not nome:
+                        continue
+                    itens_processados.append((nome, peso_valor))
+                else:
+                    return
+
+            return itens_processados
+        except:
+            return("Item não foram dividos por virgula")

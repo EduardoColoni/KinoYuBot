@@ -22,12 +22,11 @@ from src.bot.services import raffle_service
 import uuid
 import urllib.parse
 
-
 # Classe do Modal que coleta os itens do sorteio
 class RegisterRaffleModal(discord.ui.Modal, title="Registrar itens para sorteio"):
     def __init__(self):
         super().__init__(title="Registrar itens")
-    itens = discord.ui.TextInput(label="Adicione itens(item1:peso1, item2:peso2, etc)", placeholder="ex: skin dourada:50, skin prata:30", max_length=30, style=discord.TextStyle.long)
+    itens = discord.ui.TextInput(label="Adicione itens(item1:peso1, item2:peso2, etc)", placeholder="ex: skin dourada:50, skin prata:30", max_length=100, style=discord.TextStyle.long)
 
     async def on_submit(self, interaction: discord.Interaction):
         conn = PostgresPool.get_conn()
@@ -45,7 +44,9 @@ class RegisterRaffleModal(discord.ui.Modal, title="Registrar itens para sorteio"
             await interaction.response.send_message("Itens registrados com sucesso!")
 
         except Exception as e:
-            await interaction.response.send_message("Erro ao inserir os itens!")
+            service = RaffleService()
+            erro = service.organizar_itens()
+            await interaction.response.send_message(f"Erro ao inserir os itens, tente novamente e verifique se a formatação está correta!\nErro: {erro}")
             conn.rollback()
             raise RuntimeError(f"Erro ao inserir itens: {e}")
         finally:
@@ -55,6 +56,7 @@ class RegisterRaffleModal(discord.ui.Modal, title="Registrar itens para sorteio"
 class Raffle(commands.Cog):
     def __init__(self, bot):
         self.bot = bot
+        self.service = None  # vai guardar a instância do service
 
     @app_commands.command(name="iniciar", description="Inicia o processo de autenticação com a plataforma de streaming")
     async def ola(self, interaction: discord.Interaction):
@@ -87,22 +89,39 @@ class Raffle(commands.Cog):
         await interaction.response.send_modal(RegisterRaffleModal())
 
     @app_commands.command()
-    async def teste(self, interaction: discord.Interaction):
-        conn = PostgresPool.get_conn()
-        try:
-            guild_id = str(interaction.guild.id)
-            service = RaffleService(conn, guild_id)
-            await interaction.response.send_message("iniciando")
-            sorteio = await service.raffle_loop(5, True)
-            print(sorteio)
-        finally:
-            PostgresPool.release_conn(conn)
+    async def iniciar_sorteio(self, interaction: discord.Interaction):
+        if not self.service:
+            conn = PostgresPool.get_conn()
+            try:
+                guild_id = str(interaction.guild.id)
+                self.service = RaffleService(conn, guild_id)
+
+                await interaction.response.send_message("Iniciando sorteio...")
+
+                # Função callback que será chamada pelo raffle_loop
+                async def notify_winner(winner_name, item = None):
+                    if not winner_name:
+                        await interaction.followup.send("Itens para sorteio vazio ou usuário parou a função")
+                        return
+                    else:
+                        await interaction.followup.send(f"🎉 O vencedor foi **{winner_name}** com o item {item}!")
+
+                # Passa o callback para o raffle_loop
+                await self.service.raffle_loop(5, notify_winner)
+                self.service = None
+
+            finally:
+                PostgresPool.release_conn(conn)
+        else:
+            await interaction.response.send_message("Sorteio já em execução.")
 
     @app_commands.command()
-    async def hmmmm(self, interaction: discord.Interaction):
-        service = RaffleService.raffle_viewer(138603338)
-        print(service)
-        await interaction.response.send_message("sla")
+    async def parar(self, interaction: discord.Interaction):
+        if self.service:
+            self.service.user_input = False
+            await interaction.response.send_message("Sorteio parado!")
+        else:
+            await interaction.response.send_message("Nenhum sorteio em execução.")
 
 # Setup para carregar o Cog
 async def setup(bot):

@@ -52,6 +52,7 @@ class TwitchAuthController:
                 token_json = response.json()
                 streamer_name, streamer_id = self._get_user(token_json["access_token"])
                 repo_auth.insert_token(token_json, streamer_id, guild_id, streamer_name)
+                print("Autenticação concluída com sucesso!")
                 return HTMLResponse("<h1>Autenticação concluída com sucesso! 🎉</h1>")
 
             return HTMLResponse(f"Erro ao autenticar: {response.text}", status_code=response.status_code)
@@ -89,6 +90,7 @@ class TwitchAuthController:
             if response.status_code == 200:
                 token_json = response.json()
                 repo_auth.refresh_token(token_json)
+                print("Token atualizado com sucesso!")
                 return HTMLResponse("<h1>Token atualizado com sucesso!</h1>")
 
             return HTMLResponse(f"Erro ao atualizar token: {response.text}", status_code=response.status_code)
