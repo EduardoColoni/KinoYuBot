@@ -1,15 +1,6 @@
-import random
-
 import discord
-import asyncio
-
-import requests
-from anyio import sleep
 from discord import app_commands
 from discord.ext import commands, tasks
-from fastapi import Request, APIRouter
-from fastapi.responses import HTMLResponse
-from watchgod import awatch
 
 from src.bot.services.raffle_service import RaffleService
 from src.database.postgres.connection.postgres_connection import PostgresPool
@@ -17,23 +8,33 @@ from src.database.redis.redis_repository import RedisRepository
 from src.database.redis.connection.redis_connection import RedisConnectionHandle
 from src.database.postgres.postgres_repository_raffle import PostgresRepositoryRaffle
 
-from src.bot.services import raffle_service
-
 import uuid
 import urllib.parse
 
-# Classe do Modal que coleta os itens do sorteio
+# Modal para registrar itens do sorteio
 class RegisterRaffleModal(discord.ui.Modal, title="Registrar itens para sorteio"):
-    def __init__(self):
+    def __init__(self, services):
         super().__init__(title="Registrar itens")
-    itens = discord.ui.TextInput(label="Adicione itens(item1:peso1, item2:peso2, etc)", placeholder="ex: skin dourada:50, skin prata:30", max_length=100, style=discord.TextStyle.long)
+        self.services = services  # Recebe dicionário de serviços por guild
+
+    itens = discord.ui.TextInput(
+        label="Adicione itens(item1:peso1, item2:peso2, etc)",
+        placeholder="ex: skin dourada:50, skin prata:30",
+        max_length=300,
+        style=discord.TextStyle.long
+    )
 
     async def on_submit(self, interaction: discord.Interaction):
+        guild_id = str(interaction.guild.id)
         conn = PostgresPool.get_conn()
         try:
-            guild_id = str(interaction.guild.id)
-            repo_raffle = PostgresRepositoryRaffle(conn)  # passa a conexão
-            service = RaffleService(conn, guild_id)
+            repo_raffle = PostgresRepositoryRaffle(conn)
+            # Usa o serviço do sorteio se já existir, senão cria temporário
+            if guild_id in self.services:
+                service = self.services[guild_id]
+            else:
+                service = RaffleService(conn, guild_id)
+
             raffle_id = repo_raffle.make_raffle_id(guild_id)
             itens_bruto = self.itens.value
             itens_processados = service.organizar_itens(itens_bruto)
@@ -44,11 +45,10 @@ class RegisterRaffleModal(discord.ui.Modal, title="Registrar itens para sorteio"
             await interaction.response.send_message("Itens registrados com sucesso!")
 
         except Exception as e:
-            service = RaffleService()
-            erro = service.organizar_itens()
-            await interaction.response.send_message(f"Erro ao inserir os itens, tente novamente e verifique se a formatação está correta!\nErro: {erro}")
+            await interaction.response.send_message(
+                f"Erro ao inserir os itens, verifique a formatação!\nErro: {e}"
+            )
             conn.rollback()
-            raise RuntimeError(f"Erro ao inserir itens: {e}")
         finally:
             PostgresPool.release_conn(conn)
 
@@ -56,9 +56,9 @@ class RegisterRaffleModal(discord.ui.Modal, title="Registrar itens para sorteio"
 class Raffle(commands.Cog):
     def __init__(self, bot):
         self.bot = bot
-        self.service = None  # vai guardar a instância do service
+        self.services = {}  # guarda RaffleService por guild_id
 
-    @app_commands.command(name="iniciar", description="Inicia o processo de autenticação com a plataforma de streaming")
+    @app_commands.command(name="iniciar", description="Inicia autenticação Twitch")
     async def ola(self, interaction: discord.Interaction):
         redis_conn = RedisConnectionHandle().connect()
         redis_repository = RedisRepository(redis_conn)
@@ -75,7 +75,7 @@ class Raffle(commands.Cog):
             "response_type=code&"
             "client_id=fokrmhg7uzg90wxqn9rnl3sz0yyiou&"
             "redirect_uri=https%3A%2F%2Fremarkably-knowing-serval.ngrok-free.app%2Ftwitch_callback&"
-            "scope=moderator%3Aread%3Achatters&"
+            "scope=chat:edit+chat:read+moderator:read:chatters+user:write:chat&"
             f"state={encoded_state}"
         )
 
@@ -84,46 +84,47 @@ class Raffle(commands.Cog):
             ephemeral=True
         )
 
-    @app_commands.command(name="registrar_sorteio", description="Abre uma janela para registrar os itens do sorteio")
+    @app_commands.command(name="registrar_sorteio", description="Abre modal para registrar itens")
     async def registrar_sorteio(self, interaction: discord.Interaction):
-        await interaction.response.send_modal(RegisterRaffleModal())
+        await interaction.response.send_modal(RegisterRaffleModal(self.services))
 
     @app_commands.command()
     async def iniciar_sorteio(self, interaction: discord.Interaction):
-        if not self.service:
+        guild_id = str(interaction.guild.id)
+        if guild_id not in self.services:
             conn = PostgresPool.get_conn()
             try:
-                guild_id = str(interaction.guild.id)
-                self.service = RaffleService(conn, guild_id)
+                service = RaffleService(conn, guild_id)
+                self.services[guild_id] = service
 
                 await interaction.response.send_message("Iniciando sorteio...")
 
-                # Função callback que será chamada pelo raffle_loop
-                async def notify_winner(winner_name, item = None):
+                async def notify_winner(winner_name, item=None):
                     if not winner_name:
                         await interaction.followup.send("Itens para sorteio vazio ou usuário parou a função")
                         return
-                    else:
-                        await interaction.followup.send(f"🎉 O vencedor foi **{winner_name}** com o item {item}!")
+                    await interaction.followup.send(f"🎉 O vencedor foi **{winner_name}** com o item **{item[3]}!**")
 
-                # Passa o callback para o raffle_loop
-                await self.service.raffle_loop(5, notify_winner)
-                self.service = None
+                await service.raffle_loop(10, notify_winner)
 
             finally:
                 PostgresPool.release_conn(conn)
+                if guild_id in self.services:  # remove instância ao terminar
+                    del self.services[guild_id]
         else:
-            await interaction.response.send_message("Sorteio já em execução.")
+            await interaction.response.send_message("Sorteio já em execução nesse servidor.")
 
     @app_commands.command()
     async def parar(self, interaction: discord.Interaction):
-        if self.service:
-            self.service.user_input = False
+        guild_id = str(interaction.guild.id)
+        if guild_id in self.services:
+            service = self.services[guild_id]
+            service.user_input = False
+            del self.services[guild_id]  # libera slot imediatamente
             await interaction.response.send_message("Sorteio parado!")
         else:
-            await interaction.response.send_message("Nenhum sorteio em execução.")
+            await interaction.response.send_message("Nenhum sorteio em execução nesse servidor.")
 
 # Setup para carregar o Cog
 async def setup(bot):
     await bot.add_cog(Raffle(bot))
-

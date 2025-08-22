@@ -4,22 +4,13 @@ import re
 from functools import partial
 
 import requests
-from aiohttp import streamer
 from anyio import sleep
-from discord import app_commands
-from discord.ext import commands, tasks
-from fastapi import Request, APIRouter
-from fastapi.responses import HTMLResponse
-from watchgod import awatch
-
 from src.core.config import api_config
 
 from src.database.redis.redis_repository import RedisRepository
 from src.database.redis.connection.redis_connection import RedisConnectionHandle
 from src.database.postgres.postgres_repository_raffle import PostgresRepositoryRaffle
 from src.database.postgres.connection.postgres_connection import PostgresPool
-import uuid
-import urllib.parse
 
 class RaffleService:
     def __init__(self, conn=None, guild_id=None):
@@ -41,8 +32,12 @@ class RaffleService:
             if random.choice([True, False]):
                 viewer = await asyncio.to_thread(partial(self.raffle_viewer, item[2]))
                 winner_name = str(viewer["user_name"])
+                streamer_id = str(item[2])
+                item_name = str(item[3])
                 self.update_item(winner_name, item[0], item[1])
                 print(f"Sorteio feito: {item}, vencedor: {viewer}")
+                url_base = api_config["URL_BASE"]
+                response = requests.post(f"{url_base}/send_message/{streamer_id}/{winner_name}/{item_name}")
 
                 # Chama o callback e passa as informações
                 await on_winner_callback(winner_name, item)

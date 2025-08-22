@@ -14,16 +14,6 @@ class PostgresRepositoryAuth:
             self.conn.rollback()
             raise RuntimeError(f"Failed to insert token: {e}")
 
-    def select_token(self):
-        try:
-            with self.conn.cursor() as cur:
-                cur.execute("SELECT token FROM streamer ORDER BY id DESC LIMIT 1")
-                row = cur.fetchone()
-                return row[0] if row else None  # Retorna o dicionário diretamente
-        except Exception as e:
-            self.conn.rollback()
-            raise RuntimeError(f"Failed to select token: {e}")
-
     def refresh_token(self, token_data: dict) -> None:
         try:
             #Insere token em formato JSON no banco de dados
@@ -34,3 +24,12 @@ class PostgresRepositoryAuth:
         except Exception as e:
             self.conn.rollback()
             raise RuntimeError(f"Failed to refresh token: {e}")
+
+    def select_token_by_streamer(self, streamer_id: str):
+        with self.conn.cursor() as cur:
+            cur.execute("SELECT token FROM streamer WHERE streamer_id = %s", (streamer_id,))
+            row = cur.fetchone()
+            if row:
+                import json
+                return json.loads(row[0]) if isinstance(row[0], str) else row[0]
+            return None
